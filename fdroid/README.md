@@ -2,7 +2,7 @@
 
 `io.github.irisphilip.netmap.yml` is a candidate metadata file for `fdroiddata/metadata/`. It uses F-Droid's Flutter srclib, a pinned Flutter version, NDK r28c, a scanned local pub cache, and an unsigned universal APK. The bundled Gradle wrapper JAR is removed before F-Droid scanning; Flutter restores the build-tool wrapper when it builds.
 
-The file refers to the first release tag `v1.0.0`. That tag must exist and point to reviewed source before submitting the recipe. Confirm the GitHub Linux verification workflow passes for the release commit first.
+The file refers to the first release tag `v1.0.0`, at commit `a7a028a63dd140e783b6a8b55db7b31d271f13aa`. Linux analysis, all tests, and the unsigned universal Android release build passed in [verification run 42785595684](https://github.com/iris-philip/netmap/actions/runs/42785595684).
 
 This recipe has not been validated with `fdroid readmeta`, `fdroid lint`, or an F-Droid build-server build. A passing ordinary Linux build is useful evidence but does not replace those checks or maintainer review. Do not claim a successful F-Droid build until it has actually run.
 
