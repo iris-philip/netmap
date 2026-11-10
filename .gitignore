@@ -1,0 +1,38 @@
+# Flutter and Dart build state
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
+.bootstrap-*/
+
+# Android and machine-local configuration
+android/.gradle/
+android/.kotlin/
+android/.cxx/
+android/app/.cxx/
+android/local.properties
+local.properties
+key.properties
+android/key.properties
+
+# Never publish signing secrets or compiled deliverables
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+*password*
+*signing-private*/
+*signing-backup*/
+*.apk
+*.aab
+*.idsig
+
+# Editor and OS state
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
