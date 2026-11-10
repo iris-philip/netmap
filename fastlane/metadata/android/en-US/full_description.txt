@@ -1,0 +1,14 @@
+NetMap discovers responding IPv4 devices on your connected Wi-Fi network and displays a zoomable logical subnet map.
+
+Features:
+• Discover devices using bounded TCP probes on common service ports.
+• View IP addresses and responding TCP services.
+• Switch between a topology map and a device list.
+• Follow scan progress, stop a scan, and scan again.
+• Copy discovered devices as CSV to the clipboard.
+
+Discovery runs locally. No account or cloud service is required. Android 7.0 or newer and an IPv4 Wi-Fi network with a /22 through /30 prefix are required.
+
+Some devices may not respond because of firewalls, sleep, or network isolation. Lines show shared subnet membership, not physical cable or switch connections. MAC addresses, hostnames, vendors, and device types are not inferred.
+
+Only scan networks you own or have permission to inspect.

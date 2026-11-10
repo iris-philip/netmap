@@ -1,0 +1,1 @@
+Initial release: local Wi-Fi IPv4 discovery, logical topology map, device details, TCP service reporting, scan controls, and CSV copying.

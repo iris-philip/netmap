@@ -1,5 +1,6 @@
 # Flutter and Dart build state
 .dart_tool/
+.pub-cache/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages

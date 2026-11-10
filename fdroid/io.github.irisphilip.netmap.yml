@@ -1,0 +1,45 @@
+Categories:
+  - Connectivity
+License: MIT
+AuthorName: iris-philip
+SourceCode: https://github.com/iris-philip/netmap
+IssueTracker: https://github.com/iris-philip/netmap/issues
+
+AutoName: NetMap
+
+RepoType: git
+Repo: https://github.com/iris-philip/netmap.git
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 1
+    commit: v1.0.0
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-21-jdk-headless
+      - sdkmanager 'cmake;3.22.1'
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      - flutter@3.47.9
+    rm:
+      - android/gradle/wrapper/gradle-wrapper.jar
+    prebuild:
+      - export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+      - export PATH=$JAVA_HOME/bin:$PATH
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get --enforce-lockfile
+    scandelete:
+      - .pub-cache
+    build:
+      - export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+      - export PATH=$JAVA_HOME/bin:$PATH
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter build apk --release --target-platform=android-arm,android-arm64,android-x64
+    ndk: r28c
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
+CurrentVersion: 1.0.0
+CurrentVersionCode: 1

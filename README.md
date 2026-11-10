@@ -42,7 +42,7 @@ For an x86-64 Android emulator:
 flutter build apk --debug --target-platform android-x64
 ```
 
-The phone APK is written to `build/app/outputs/flutter-apk/app-release.apk`. The Gradle template currently signs builds with a debug key. For distribution, sign the resulting APK separately with your own persistent release key using Android `apksigner`, or configure a private release signing setup. No private keys, passwords, or signing backups belong in this repository.
+Release builds are unsigned so the developer or F-Droid can sign them separately. Flutter copies the output into `build/app/outputs/flutter-apk/`; check the build log for the filename. Sign the resulting APK with your own persistent release key using Android `apksigner`, or let F-Droid sign its source build. No private keys, passwords, or signing backups belong in this repository.
 
 ## Verification status
 
@@ -60,6 +60,8 @@ The included project targets SDK 36. If upgrading to target API 37 or above, dec
 
 ## Publication status
 
-The application ID is currently the starter ID `com.example.netmap`. Choose a permanent unique ID before publication. A project license has not been selected, and no F-Droid submission or reproducible-build verification has been completed. F-Droid inclusion requires a suitable FOSS license, public source, release metadata, and a build recipe; publishing this repository alone does not establish eligibility.
+NetMap is licensed under [MIT](LICENSE). The permanent application ID is `io.github.irisphilip.netmap`; earlier test APKs used `com.example.netmap` and are separate Android apps.
+
+Store descriptions, a changelog, privacy information, a Linux Android verification workflow, and a candidate F-Droid recipe are included. F-Droid publication still requires review and a successful F-Droid build. No approval or reproducible-build verification is claimed. See [packaging notes](fdroid/README.md) and the [privacy statement](docs/PRIVACY.md).
 
 See the [F-Droid submission guide](https://f-droid.org/docs/Submitting_to_F-Droid_Quick_Start_Guide/).
