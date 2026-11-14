@@ -17,8 +17,9 @@ android/local.properties
 local.properties
 key.properties
 android/key.properties
+android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
-# Never publish signing secrets or compiled deliverables
+# Signing material and compiled deliverables
 *.jks
 *.keystore
 *.p12
@@ -30,6 +31,13 @@ android/key.properties
 *.apk
 *.aab
 *.idsig
+*.exe
+*.dll
+*.pdb
+*.zip
+dist/
+outputs/
+installer/runtime/
 
 # Editor and OS state
 .idea/

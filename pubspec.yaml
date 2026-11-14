@@ -1,14 +1,17 @@
 name: netmap
 description: Local Wi-Fi device discovery and a logical topology map.
 publish_to: none
-version: 1.0.0+1
+version: 1.2.3+3
 environment:
   sdk: '>=3.5.0 <4.0.0'
 dependencies:
   flutter:
     sdk: flutter
+  multicast_dns: ^0.3.3+1
 dev_dependencies:
   flutter_test:
     sdk: flutter
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/iris-logo.png

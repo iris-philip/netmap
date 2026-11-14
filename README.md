@@ -1,25 +1,35 @@
 # NetMap
 
-A Flutter Android app that discovers responding IPv4 devices on the phone's connected Wi-Fi network and displays a logical topology map. Discovery runs locally; no server or account is required.
+NetMap discovers responding IPv4 devices on a connected local network and displays a logical subnet map. The Flutter app runs on Android and Windows; discovery is performed locally without a server or account.
 
 ## Features
 
-- Reads the actual Wi-Fi IPv4 address, prefix, and gateway from Android.
+- Reads the Wi-Fi address, prefix, and gateway from Android, or the active IPv4 configuration on Windows.
 - Discovers responding hosts on /22 through /30 networks using bounded TCP probes.
-- Uses native Android sockets attached to Wi-Fi even when mobile data is enabled.
-- Displays a zoomable subnet map, device details, responding ports, progress, stop/rescan, and CSV copying.
+- On Android, attaches sockets to Wi-Fi even when mobile data is enabled.
+- Displays a zoomable subnet map, device details, responding ports, scan progress, stop/rescan, and CSV export.
+- Looks up reverse-DNS and mDNS names when available; it does not infer device types, MAC addresses, or vendors.
 - Probes TCP ports 22, 80, 443, 445, 554, 631, 8008, 8080, and 9100. An accepted connection or explicit refusal counts as a response.
 
-## Requirements
+## Android
 
-- Flutter 3.47.9 stable / Dart 3.13.7 (the versions used for the verified builds).
+### Requirements
+
+- Flutter 3.47.9 stable / Dart 3.13.7.
 - Android SDK Platform 36, Build Tools 36.0.0, NDK 28.2.13676358, and CMake 3.22.1.
-- Java compatible with the bundled Gradle 9.3.1 / Android Gradle Plugin 9.1.0 build. The verified environment used Android Studio's bundled Java 25.
-- Android 7.0 / API 24 or newer. A physical Android phone is needed to validate real Wi-Fi discovery; emulator networking is virtualized.
+- Java compatible with the bundled Gradle 9.3.1 / Android Gradle Plugin 9.1.0 build.
+- Android 7.0 / API 24 or newer. A physical phone is needed to validate real Wi-Fi discovery; emulator networking is virtualized.
 
-## Run and check
+### Run and check
 
 From the repository root:
+
+```powershell
+.\setup.ps1
+.\run.ps1 android
+```
+
+Or use Flutter directly:
 
 ```sh
 flutter pub get
@@ -28,35 +38,47 @@ flutter test
 flutter run
 ```
 
-The Android project is included. Flutter creates machine-local SDK paths when preparing the project; do not commit `android/local.properties`.
+Flutter creates machine-local SDK paths while preparing the project; do not commit `android/local.properties`.
 
-Build an APK with both 32-bit and 64-bit ARM support for phones:
+Build an unsigned APK with both 32-bit and 64-bit ARM support:
 
 ```sh
 flutter build apk --release --target-platform 'android-arm,android-arm64'
 ```
 
-For an x86-64 Android emulator:
+Release builds are unsigned so the developer or F-Droid can sign them separately. No private keys, passwords, or signing backups belong in this repository.
 
-```sh
-flutter build apk --debug --target-platform android-x64
+## Windows
+
+The Windows app discovers devices on the active IPv4 interface. Install Flutter with Windows desktop support and the Visual Studio C++ desktop build tools. `environment.ps1` uses `FLUTTER_ROOT` when set, or finds Flutter on `PATH`.
+
+```powershell
+.\setup.ps1
+.\run.ps1 windows
+.\Build-Windows.ps1
 ```
 
-Release builds are unsigned so the developer or F-Droid can sign them separately. Flutter copies the output into `build/app/outputs/flutter-apk/`; check the build log for the filename. Sign the resulting APK with your own persistent release key using Android `apksigner`, or let F-Droid sign its source build. No private keys, passwords, or signing backups belong in this repository.
+`Build-Windows.ps1` creates a release build and a ZIP under `dist`. To create the optional installer, install Inno Setup and run:
+
+```powershell
+.\Build-Installer.ps1
+```
+
+The installer script stages the Visual C++ runtime DLLs locally; they and the generated installer are excluded from Git.
 
 ## Verification status
 
-`flutter analyze` and all three subnet tests passed. The x86-64 debug APK built, installed, and launched in an API 37 Android emulator. The ARM 32/64-bit release APK also built successfully. Real-device discovery has not been verified. A separately signed release APK passed signature, alignment, and payload integrity checks; its private signing material is excluded from this source package.
+The Android source has previously passed `flutter analyze` and subnet tests, and an earlier revision was built and launched in an API 37 emulator. Real-device discovery has not been verified. Re-run the checks above for the current source revision.
 
 ## Limits
 
-This app cannot guarantee finding every device. Firewalls, sleeping devices, client isolation, VLANs, VPNs, and IPv6-only networks can restrict visibility. A firewall can also refuse connections on behalf of a host. Device types, hostnames, MAC addresses, and vendors are not inferred.
+NetMap cannot guarantee finding every device. Firewalls, sleeping devices, client isolation, VLANs, VPNs, and IPv6-only networks can restrict visibility. A firewall can also refuse connections on behalf of a host. Names depend on local reverse-DNS or mDNS responses and may be absent or misleading.
 
 Map lines show membership in the same subnet, not physical cable or switch links. Physical topology and fuller inventories require router/AP client tables or managed switch data such as SNMP/LLDP. Gateway labeling only appears if its address responds to the probes.
 
 Stop prevents scheduling more hosts and ignores stale results; active probes finish within their timeouts. Scans run in the foreground and are not persisted across restarts. Scan only networks you own or have permission to inspect.
 
-The included project targets SDK 36. If upgrading to target API 37 or above, declare `android.permission.ACCESS_LOCAL_NETWORK` in the manifest; native runtime permission handling is already included. See [Android local network permissions](https://developer.android.com/privacy-and-security/local-network-permission).
+For Android targets API 37 and above, the app requests `android.permission.ACCESS_LOCAL_NETWORK` at runtime. See [Android local network permissions](https://developer.android.com/privacy-and-security/local-network-permission).
 
 ## Publication status
 
