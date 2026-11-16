@@ -9,7 +9,8 @@ NetMap discovers responding IPv4 devices on a connected local network and displa
 - On Android, attaches sockets to Wi-Fi even when mobile data is enabled.
 - On iOS, uses the connected Wi-Fi interface and requests local-network access when you scan.
 - Displays a zoomable subnet map, device details, responding ports, scan progress, stop/rescan, and CSV export.
-- Looks up reverse-DNS and mDNS names when available; it does not infer device types, MAC addresses, or vendors.
+- Looks up reverse-DNS and mDNS names when available. On Windows, it also tries `nslookup` and `ping -a` for devices without reverse-DNS names.
+- Does not treat `arp -a` results as hostnames: ARP maps local IP addresses to link-layer addresses, not device names.
 - Probes TCP ports 22, 80, 443, 445, 554, 631, 8008, 8080, and 9100. An accepted connection or explicit refusal counts as a response.
 
 ## Android

@@ -109,6 +109,11 @@ class NetworkApi {
     }
     if (reverseName != null && reverseName.isNotEmpty && reverseName != ip) return reverseName;
 
+    if (Platform.isWindows) {
+      final name = await _lookupWindowsName(ip);
+      if (name != null) return name;
+    }
+
     final client = _mdnsClient;
     if (client == null || _mdnsInterfaceIp != network.ip) return null;
     final reversedAddress = ip.split('.').reversed.join('.');
@@ -127,6 +132,63 @@ class NetworkApi {
       return null;
     }
     return null;
+  }
+
+  Future<String?> _lookupWindowsName(String ip) async {
+    final nslookupName = await _runWindowsNameCommand(
+      'nslookup.exe',
+      [ip],
+      RegExp(r'^\s*Name:\s*(.+?)\s*$', multiLine: true, caseSensitive: false),
+      ip,
+    );
+    if (nslookupName != null) return nslookupName;
+
+    return _runWindowsNameCommand(
+      'ping.exe',
+      ['-a', '-n', '1', '-w', '1000', ip],
+      RegExp(r'^\s*Pinging\s+(.+?)\s+\[', multiLine: true, caseSensitive: false),
+      ip,
+    );
+  }
+
+  Future<String?> _runWindowsNameCommand(
+    String executable,
+    List<String> arguments,
+    RegExp namePattern,
+    String ip,
+  ) async {
+    Process process;
+    try {
+      process = await Process.start(
+        executable,
+        arguments,
+        runInShell: false,
+      );
+    } on ProcessException {
+      return null;
+    }
+
+    final stdout = process.stdout.transform(utf8.decoder).join();
+    final stderr = process.stderr.transform(utf8.decoder).join();
+    final exitCode = process.exitCode;
+    final status = await exitCode.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () {
+        process.kill();
+        return -1;
+      },
+    );
+    if (status == -1) {
+      await exitCode;
+      await stdout;
+      await stderr;
+      return null;
+    }
+
+    final output = '${await stdout}\n${await stderr}';
+    final candidate = namePattern.firstMatch(output)?.group(1)?.trim();
+    if (candidate == null || candidate.isEmpty || candidate == ip) return null;
+    return candidate.endsWith('.') ? candidate.substring(0, candidate.length - 1) : candidate;
   }
 
   Future<WifiNetwork> connect() async {
