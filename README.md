@@ -1,12 +1,13 @@
 # NetMap
 
-NetMap discovers responding IPv4 devices on a connected local network and displays a logical subnet map. The Flutter app runs on Android and Windows; discovery is performed locally without a server or account.
+NetMap discovers responding IPv4 devices on a connected local network and displays a logical subnet map. The Flutter app runs on Android, iOS, and Windows; discovery is performed locally without a server or account.
 
 ## Features
 
 - Reads the Wi-Fi address, prefix, and gateway from Android, or the active IPv4 configuration on Windows.
 - Discovers responding hosts on /22 through /30 networks using bounded TCP probes.
 - On Android, attaches sockets to Wi-Fi even when mobile data is enabled.
+- On iOS, uses the connected Wi-Fi interface and requests local-network access when you scan.
 - Displays a zoomable subnet map, device details, responding ports, scan progress, stop/rescan, and CSV export.
 - Looks up reverse-DNS and mDNS names when available; it does not infer device types, MAC addresses, or vendors.
 - Probes TCP ports 22, 80, 443, 445, 554, 631, 8008, 8080, and 9100. An accepted connection or explicit refusal counts as a response.
@@ -66,9 +67,21 @@ The Windows app discovers devices on the active IPv4 interface. Install Flutter 
 
 The installer script stages the Visual C++ runtime DLLs locally; they and the generated installer are excluded from Git.
 
+## iOS
+
+Build and run iOS from macOS with Xcode installed; iOS apps cannot be built or signed on Windows. The app supports iOS 15 and later.
+
+```sh
+flutter pub get
+flutter run -d <ios-device>
+flutter build ios --release
+```
+
+In Xcode, open `ios/Runner.xcworkspace` to configure signing or archive the app for distribution. On the first scan, allow NetMap to access the local network. CSV exports use the iOS Files picker.
+
 ## Verification status
 
-The Android source has previously passed `flutter analyze` and subnet tests, and an earlier revision was built and launched in an API 37 emulator. Real-device discovery has not been verified. Re-run the checks above for the current source revision.
+The Android source has previously passed `flutter analyze` and subnet tests, and an earlier revision was built and launched in an API 37 emulator. Real-device discovery has not been verified. Re-run the checks above for the current source revision. iOS builds and Wi-Fi discovery require macOS with Xcode and have not been verified on this Windows host.
 
 ## Limits
 

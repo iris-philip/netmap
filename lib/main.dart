@@ -109,10 +109,10 @@ class _NetworkScreenState extends State<NetworkScreen> {
 
   Future<void> openDevice(Device d) async {
     try {
-      await api.openChrome(d.ip);
+      await api.openDevice(d.ip);
     } on PlatformException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Could not open Chrome.')));
+        SnackBar(content: Text(e.message ?? 'Could not open the device in a browser.')));
     }
   }
 
@@ -126,7 +126,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
       const SizedBox(height: 12), Text(d.phone ? 'Local network interface' : d.services),
       const SizedBox(height: 16), FilledButton.icon(
         onPressed: () => openDevice(d), icon: const Icon(Icons.open_in_new),
-        label: Text('Open https://${d.ip} in Chrome')),
+        label: Text('Open https://${d.ip} in browser')),
       const SizedBox(height: 16), const Text('Lines indicate membership in the same local subnet. Device type and physical connections are not inferred.'),
     ]))));
 

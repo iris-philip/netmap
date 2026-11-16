@@ -50,7 +50,7 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
-                "openChrome" -> {
+                "openDevice" -> {
                     val ip = call.argument<String>("ip")
                     val parts = ip?.split('.')
                     if (parts == null || parts.size != 4 || parts.any {

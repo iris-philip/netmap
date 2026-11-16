@@ -179,9 +179,9 @@ try {
     if (exitCode != 0) throw PlatformException(code: 'SAVE', message: 'Could not save the CSV file. Choose a writable location and try again.');
     return path.isEmpty ? null : path;
   }
-  Future<void> openChrome(String ip) async {
+  Future<void> openDevice(String ip) async {
     if (!Platform.isWindows) {
-      await channel.invokeMethod<void>('openChrome', {'ip': ip});
+      await channel.invokeMethod<void>('openDevice', {'ip': ip});
       return;
     }
     if (InternetAddress.tryParse(ip)?.type != InternetAddressType.IPv4) {
@@ -197,7 +197,7 @@ try {
 if (-not \$chrome) { throw 'Google Chrome is not installed in a standard location.' }
 Start-Process -FilePath \$chrome -ArgumentList 'https://$ip'
 ''']);
-    if (result.exitCode != 0) throw PlatformException(code: 'CHROME', message: 'Could not open Chrome. Check that it is installed.');
+    if (result.exitCode != 0) throw PlatformException(code: 'BROWSER', message: 'Could not open Chrome. Check that it is installed.');
   }
   Future<Device?> probe(WifiNetwork network, String ip) async {
     if (Platform.isWindows) {
