@@ -8,9 +8,10 @@ NetMap discovers responding IPv4 devices on a connected local network and displa
 - Discovers responding hosts on /22 through /30 networks using bounded TCP probes.
 - On Android, attaches sockets to Wi-Fi even when mobile data is enabled.
 - On iOS, uses the connected Wi-Fi interface and requests local-network access when you scan.
-- Displays a zoomable subnet map, device details, responding ports, scan progress, stop/rescan, and CSV export.
+- Adds responding devices to the map immediately, then fills in their names and port details after discovery.
+- Displays a zoomable subnet map, MAC addresses and manufacturer estimates where available, scan progress, stop/rescan, and CSV export.
 - Looks up reverse-DNS and mDNS names when available. On Windows, it also tries `nslookup` and `ping -a` for devices without reverse-DNS names.
-- Does not treat `arp -a` results as hostnames: ARP maps local IP addresses to link-layer addresses, not device names.
+- Displays MAC addresses from the local ARP table where the operating system exposes them, and looks up manufacturers offline using the bundled IEEE MA-L OUI registry.
 - Probes TCP ports 22, 80, 443, 445, 554, 631, 8008, 8080, and 9100. An accepted connection or explicit refusal counts as a response.
 
 ## Android
@@ -96,7 +97,9 @@ The Android source has previously passed `flutter analyze` and subnet tests, and
 
 ## Limits
 
-NetMap cannot guarantee finding every device. Firewalls, sleeping devices, client isolation, VLANs, VPNs, and IPv6-only networks can restrict visibility. A firewall can also refuse connections on behalf of a host. Names depend on local reverse-DNS or mDNS responses and may be absent or misleading.
+NetMap cannot guarantee finding every device. Firewalls, sleeping devices, client isolation, VLANs, VPNs, and IPv6-only networks can restrict visibility. A firewall can also refuse connections on behalf of a host. Names depend on local reverse-DNS or mDNS responses and may be absent or misleading. iOS does not expose peer MAC addresses to apps, and Android may restrict ARP-table access. Manufacturer names are based on the IEEE OUI registration and may not match the device's retail brand; randomized or locally administered MAC addresses have no manufacturer match.
+
+The bundled `assets/data/oui.json` manufacturer map is derived from the IEEE Registration Authority's public MA-L registry: [standards-oui.ieee.org/oui/oui.csv](https://standards-oui.ieee.org/oui/oui.csv). Lookups are performed locally; device MAC addresses are not sent to an external vendor-lookup service.
 
 Map lines show membership in the same subnet, not physical cable or switch links. Physical topology and fuller inventories require router/AP client tables or managed switch data such as SNMP/LLDP. Gateway labeling only appears if its address responds to the probes.
 

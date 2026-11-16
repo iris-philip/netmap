@@ -8,4 +8,6 @@ Saving a CSV exports device IP addresses and responding ports through Android's 
 
 The Android app uses Internet/network-state permissions to inspect the Wi-Fi connection and create local network sockets. The iOS app requests local-network access when the user scans. Neither platform needs location access for its current implementation.
 
+On Windows and, where permitted by Android, the app reads the local ARP table to obtain a discovered device's MAC address. iOS does not provide apps access to peer MAC addresses. Manufacturer lookups use a bundled IEEE OUI registry locally; MAC addresses are not sent to an external lookup service.
+
 This statement describes the NetMap source in this repository. Android, the device vendor, and your network infrastructure have their own privacy behavior.

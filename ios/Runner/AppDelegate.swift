@@ -35,6 +35,23 @@ import UIKit
       } catch {
         result(FlutterError(code: "WIFI", message: error.localizedDescription, details: nil))
       }
+    case "discover":
+      guard let arguments = call.arguments as? [String: Any],
+            let interface = arguments["id"] as? String,
+            let ip = arguments["ip"] as? String else {
+        result(FlutterError(code: "ARGS", message: "Missing network or IP address.", details: nil))
+        return
+      }
+      DispatchQueue.global(qos: .userInitiated).async {
+        do {
+          let reachable = try self.discover(ip: ip, interface: interface)
+          DispatchQueue.main.async { result(reachable) }
+        } catch {
+          DispatchQueue.main.async {
+            result(FlutterError(code: "DISCOVER", message: error.localizedDescription, details: nil))
+          }
+        }
+      }
     case "probe":
       guard let arguments = call.arguments as? [String: Any],
             let interface = arguments["id"] as? String,
@@ -154,7 +171,31 @@ import UIKit
       responsive = responsive || outcome.responded
       if outcome.open { openPorts.append(port) }
     }
-    return ["reachable": responsive, "ports": openPorts]
+    return ["reachable": responsive, "ports": openPorts, "macAddress": NSNull()]
+  }
+
+  private func discover(ip: String, interface: String) throws -> Bool {
+    let network = try activeWifiNetwork()
+    guard interface == "en0" else {
+      throw NSError(domain: "NetMap", code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "The Wi-Fi connection changed. Scan again."])
+    }
+    guard let target = Self.parseIPv4(ip) else {
+      throw NSError(domain: "NetMap", code: 4,
+                    userInfo: [NSLocalizedDescriptionKey: "Invalid device IP address."])
+    }
+    let address = UInt32(bigEndian: target.s_addr)
+    let local = UInt32(bigEndian: network.address.s_addr)
+    guard (address & network.mask) == (local & network.mask) else {
+      throw NSError(domain: "NetMap", code: 5,
+                    userInfo: [NSLocalizedDescriptionKey: "Address is outside the Wi-Fi subnet."])
+    }
+    for port in [22, 80, 443, 445, 554, 631, 8008, 8080, 9100] {
+      if try probe(ip: target, source: network.address, port: port).responded {
+        return true
+      }
+    }
+    return false
   }
 
   private func probe(ip: in_addr, source: in_addr, port: Int) throws -> (responded: Bool, open: Bool) {

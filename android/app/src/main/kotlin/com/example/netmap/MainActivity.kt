@@ -95,6 +95,43 @@ class MainActivity : FlutterActivity() {
                     releaseMulticastLock()
                     result.success(null)
                 }
+                "discover" -> {
+                    val id = call.argument<String>("id")
+                    val ip = call.argument<String>("ip")
+                    if (id == null || ip == null) { result.error("ARGS", "Missing network or IP address.", null); return@setMethodCallHandler }
+                    workers.execute {
+                        try {
+                            val network = manager.allNetworks.firstOrNull { it.toString() == id }
+                                ?: throw IllegalStateException("Wi-Fi disconnected. Reconnect and scan again.")
+                            val properties = manager.getLinkProperties(network)
+                                ?: throw IllegalStateException("Wi-Fi disconnected.")
+                            val address = java.net.InetAddress.getByName(ip)
+                            if (address !is Inet4Address || properties.linkAddresses.none {
+                                    it.address is Inet4Address && sameSubnet(it.address.address, address.address, it.prefixLength)
+                                }) throw IllegalArgumentException("Address is outside the Wi-Fi subnet.")
+                            var reachable = false
+                            for (port in ports) {
+                                try {
+                                    network.socketFactory.createSocket().use { socket ->
+                                        socket.connect(InetSocketAddress(address, port), 350)
+                                        reachable = true
+                                    }
+                                } catch (e: ConnectException) {
+                                    if (e.cause is android.system.ErrnoException &&
+                                        (e.cause as android.system.ErrnoException).errno == android.system.OsConstants.ECONNREFUSED ||
+                                        e.message?.contains("ECONNREFUSED") == true) reachable = true
+                                } catch (e: SecurityException) { throw e
+                                } catch (_: java.io.IOException) { }
+                                if (reachable) break
+                            }
+                            if (manager.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) != true)
+                                throw IllegalStateException("Wi-Fi disconnected. Reconnect and scan again.")
+                            runOnUiThread { result.success(reachable) }
+                        } catch (e: Exception) {
+                            runOnUiThread { result.error("DISCOVER", e.message ?: "Network discovery failed.", null) }
+                        }
+                    }
+                }
                 "probe" -> {
                     val id = call.argument<String>("id")
                     val ip = call.argument<String>("ip")
@@ -130,7 +167,12 @@ class MainActivity : FlutterActivity() {
                             }
                             if (manager.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) != true)
                                 throw IllegalStateException("Wi-Fi disconnected. Reconnect and scan again.")
-                            runOnUiThread { result.success(mapOf("reachable" to reachable, "ports" to open)) }
+                            val macAddress = macAddressFor(ip)
+                            runOnUiThread { result.success(mapOf(
+                                "reachable" to reachable,
+                                "ports" to open,
+                                "macAddress" to macAddress
+                            )) }
                         } catch (e: Exception) {
                             runOnUiThread { result.error("PROBE", e.message ?: "Network probe failed.", null) }
                         }
@@ -147,6 +189,23 @@ class MainActivity : FlutterActivity() {
             if ((a[i / 8].toInt() and mask) != (b[i / 8].toInt() and mask)) return false
         }
         return true
+    }
+
+    private fun macAddressFor(ip: String): String? {
+        return try {
+            java.io.File("/proc/net/arp").bufferedReader().useLines { lines ->
+                lines.drop(1).mapNotNull { line ->
+                    val fields = line.trim().split(Regex("\\s+"))
+                    if (fields.size < 4 || fields[0] != ip || fields[2] != "0x2") return@mapNotNull null
+                    fields[3].takeIf { it.matches(Regex("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}")) }
+                        ?.uppercase()
+                }.firstOrNull()
+            }
+        } catch (_: java.io.IOException) {
+            null
+        } catch (_: SecurityException) {
+            null
+        }
     }
 
     private fun getNetwork(result: MethodChannel.Result) {

@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:netmap/network.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('uses actual subnet and excludes phone, network and broadcast', () {
     const wifi = WifiNetwork('192.168.7.130', 25, null, '1');
     expect(wifi.hosts.length, 125);
@@ -18,6 +20,14 @@ void main() {
     expect(wifi.hosts, contains('10.0.1.0'));
   });
   test('refuses unsupported ranges rather than silently truncating', () {
-    expect(() => const WifiNetwork('10.0.0.2', 16, null, '1').hosts, throwsStateError);
+    expect(() => const WifiNetwork('10.0.0.2', 16, null, '1').hosts,
+        throwsStateError);
+  });
+  test('looks up manufacturers from the bundled OUI registry', () async {
+    final api = NetworkApi();
+    expect(await api.manufacturerForMac('28-6F-B9-01-02-03'),
+        'Nokia Shanghai Bell Co., Ltd.');
+    expect(await api.manufacturerForMac('02:6F:B9:01:02:03'), isNull);
+    expect(await api.manufacturerForMac('not-a-mac'), isNull);
   });
 }
