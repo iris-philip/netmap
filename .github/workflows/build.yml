@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign release artifacts using the configured repository secrets
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -56,9 +62,33 @@ jobs:
         run: flutter pub get --enforce-lockfile
       - name: Build unsigned release APKs
         run: flutter build apk --release --target-platform 'android-arm,android-arm64,android-x64'
+      - name: Sign release APKs
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.sign_release)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_KEYSTORE_BASE64:?Add the Android signing secrets documented in README.md}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Add the Android signing secrets documented in README.md}"
+          : "${ANDROID_KEY_ALIAS:?Add the Android signing secrets documented in README.md}"
+          : "${ANDROID_KEY_PASSWORD:?Add the Android signing secrets documented in README.md}"
+          keystore="$RUNNER_TEMP/netmap-release.jks"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          for apk in build/app/outputs/flutter-apk/*.apk; do
+            "$apksigner" sign --ks "$keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" \
+              --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+              --key-pass "pass:$ANDROID_KEY_PASSWORD" "$apk"
+            "$apksigner" verify --verbose "$apk"
+          done
       - uses: actions/upload-artifact@v4
         with:
-          name: netmap-android-release
+          name: netmap-android-build
           path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
 
@@ -79,11 +109,85 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
       - name: Build unsigned iOS app
+        if: (github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/v')) && !(github.event_name == 'workflow_dispatch' && inputs.sign_release)
         run: flutter build ios --release --no-codesign
+      - name: Install iOS signing credentials
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.sign_release)
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${IOS_DISTRIBUTION_CERTIFICATE_BASE64:?Add the iOS signing secrets documented in README.md}"
+          : "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:?Add the iOS signing secrets documented in README.md}"
+          : "${IOS_PROVISIONING_PROFILE_BASE64:?Add the iOS signing secrets documented in README.md}"
+          keychain_path="$RUNNER_TEMP/netmap-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          certificate_path="$RUNNER_TEMP/netmap-distribution.p12"
+          profile_path="$RUNNER_TEMP/netmap-profile.mobileprovision"
+          profile_plist="$RUNNER_TEMP/netmap-profile.plist"
+          trap 'security delete-keychain "$keychain_path" 2>/dev/null || true; rm -f "$certificate_path" "$profile_path" "$profile_plist"' EXIT
+          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$profile_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -k "$keychain_path" \
+            -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path" | grep -q 'Apple Distribution'
+          security cms -D -i "$profile_path" > "$profile_plist"
+          profile_uuid=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$profile_plist")
+          profile_name=$(/usr/libexec/PlistBuddy -c 'Print Name' "$profile_plist")
+          team_id=$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "$profile_plist")
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$profile_path" "$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
+          printf 'IOS_PROFILE_NAME=%s\nIOS_TEAM_ID=%s\n' "$profile_name" "$team_id" >> "$GITHUB_ENV"
+      - name: Configure Flutter iOS project
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.sign_release)
+        run: flutter build ios --release --config-only
+      - name: Archive and export signed iOS app
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.sign_release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/NetMap.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>teamID</key><string>$IOS_TEAM_ID</string>
+            <key>provisioningProfiles</key><dict>
+              <key>io.github.irisphilip.netmap</key><string>$IOS_PROFILE_NAME</string>
+            </dict>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/NetMap.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath build/ios/ipa
       - uses: actions/upload-artifact@v4
         with:
-          name: netmap-ios-release
-          path: build/ios/iphoneos/Runner.app
+          name: netmap-ios-build
+          path: |
+            build/ios/ipa/*.ipa
+            build/ios/iphoneos/Runner.app
           if-no-files-found: error
 
   windows:
@@ -107,12 +211,43 @@ jobs:
         run: flutter pub get --enforce-lockfile
       - name: Build Windows release
         run: flutter build windows --release
+      - name: Sign Windows executable
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.sign_release)
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          if (-not $env:WINDOWS_SIGNING_CERTIFICATE_BASE64) {
+            throw 'Add WINDOWS_SIGNING_CERTIFICATE_BASE64 as documented in README.md.'
+          }
+          if (-not $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD) {
+            throw 'Add WINDOWS_SIGNING_CERTIFICATE_PASSWORD as documented in README.md.'
+          }
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'netmap-signing.pfx'
+          try {
+            [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE_BASE64))
+            $kitsPath = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+            $signTool = Get-ChildItem -Path $kitsPath -Filter signtool.exe -Recurse |
+              Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+            if (-not $signTool) { throw 'Windows SDK signtool.exe was not found.' }
+            $executable = 'build/windows/x64/runner/Release/netmap.exe'
+            & $signTool.FullName sign /f $certificatePath /p $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD `
+              /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $executable
+            if ($LASTEXITCODE -ne 0) { throw 'Windows code signing failed.' }
+            & $signTool.FullName verify /pa /v $executable
+            if ($LASTEXITCODE -ne 0) { throw 'Windows signature verification failed.' }
+          } finally {
+            Remove-Item -LiteralPath $certificatePath -Force -ErrorAction SilentlyContinue
+          }
       - name: Package Windows release
         shell: pwsh
         run: |
           Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath 'NetMap-Windows.zip'
       - uses: actions/upload-artifact@v4
         with:
-          name: netmap-windows-release
+          name: netmap-windows-build
           path: NetMap-Windows.zip
           if-no-files-found: error

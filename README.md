@@ -79,6 +79,16 @@ flutter build ios --release
 
 In Xcode, open `ios/Runner.xcworkspace` to configure signing or archive the app for distribution. On the first scan, allow NetMap to access the local network. CSV exports use the iOS Files picker.
 
+## Signed release builds
+
+GitHub Actions builds unsigned artifacts for branch pushes and pull requests. To produce signed releases, add the following credentials under **Settings → Secrets and variables → Actions**. Signing runs automatically on `v*` tags, or when manually running **Build all platforms** with `sign_release` enabled.
+
+- Android: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Use a persistent Android release keystore so future app updates use the same signing identity.
+- iOS: `IOS_DISTRIBUTION_CERTIFICATE_BASE64`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, and `IOS_PROVISIONING_PROFILE_BASE64`. The Apple Distribution certificate and App Store provisioning profile must match the app's bundle ID and Apple Developer team.
+- Windows: `WINDOWS_SIGNING_CERTIFICATE_BASE64` and `WINDOWS_SIGNING_CERTIFICATE_PASSWORD`. Use a trusted Authenticode code-signing certificate.
+
+Base64-encode each certificate or keystore locally before adding it as a secret. Do not commit signing files, passwords, or private keys. Signed release artifacts are uploaded to the workflow run; iOS exports an App Store Connect IPA, Android exports signed APKs, and Windows exports a ZIP containing the signed executable. Without the required secrets, signed release runs fail rather than publishing unsigned files as signed releases.
+
 ## Verification status
 
 The Android source has previously passed `flutter analyze` and subnet tests, and an earlier revision was built and launched in an API 37 emulator. Real-device discovery has not been verified. Re-run the checks above for the current source revision. iOS builds and Wi-Fi discovery require macOS with Xcode and have not been verified on this Windows host.

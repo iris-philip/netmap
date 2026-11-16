@@ -17,7 +17,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "NetMapNetworkPlugin")
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "NetMapNetworkPlugin") else {
+      preconditionFailure("Could not register the NetMap network plugin.")
+    }
     let channel = FlutterMethodChannel(name: "netmap/network", binaryMessenger: registrar.messenger())
     networkChannel = channel
     channel.setMethodCallHandler { [weak self] call, result in
