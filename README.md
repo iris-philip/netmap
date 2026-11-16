@@ -10,7 +10,7 @@ NetMap discovers responding IPv4 devices on a connected local network and displa
 - On iOS, uses the connected Wi-Fi interface and requests local-network access when you scan.
 - Adds responding devices to the map immediately, then fills in their names and port details after discovery.
 - Displays a zoomable subnet map, MAC addresses and manufacturer estimates where available, scan progress, stop/rescan, and CSV export.
-- Looks up reverse-DNS and mDNS names when available. On Windows, it also tries `nslookup` and `ping -a` for devices without reverse-DNS names.
+- Looks up reverse-DNS and mDNS names when available. On Windows, when reverse DNS misses it tries `nslookup` and `ping -a` concurrently with mDNS.
 - Displays MAC addresses from the local ARP table where the operating system exposes them, and looks up manufacturers offline using the bundled IEEE MA-L OUI registry.
 - Probes TCP ports 22, 80, 443, 445, 554, 631, 8008, 8080, and 9100. An accepted connection or explicit refusal counts as a response.
 

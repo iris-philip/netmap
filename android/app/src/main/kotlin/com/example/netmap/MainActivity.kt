@@ -16,10 +16,13 @@ import io.flutter.plugin.common.MethodChannel
 import java.net.ConnectException
 import java.net.Inet4Address
 import java.net.InetSocketAddress
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
     private val workers = Executors.newFixedThreadPool(16)
+    private val probeWorkers = Executors.newFixedThreadPool(12)
     private var pending: MethodChannel.Result? = null
     private var csvResult: MethodChannel.Result? = null
     private var csvContents: String? = null
@@ -109,21 +112,7 @@ class MainActivity : FlutterActivity() {
                             if (address !is Inet4Address || properties.linkAddresses.none {
                                     it.address is Inet4Address && sameSubnet(it.address.address, address.address, it.prefixLength)
                                 }) throw IllegalArgumentException("Address is outside the Wi-Fi subnet.")
-                            var reachable = false
-                            for (port in ports) {
-                                try {
-                                    network.socketFactory.createSocket().use { socket ->
-                                        socket.connect(InetSocketAddress(address, port), 350)
-                                        reachable = true
-                                    }
-                                } catch (e: ConnectException) {
-                                    if (e.cause is android.system.ErrnoException &&
-                                        (e.cause as android.system.ErrnoException).errno == android.system.OsConstants.ECONNREFUSED ||
-                                        e.message?.contains("ECONNREFUSED") == true) reachable = true
-                                } catch (e: SecurityException) { throw e
-                                } catch (_: java.io.IOException) { }
-                                if (reachable) break
-                            }
+                            val (reachable, _) = scanPorts(network, address, stopAfterFirstResponse = true)
                             if (manager.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) != true)
                                 throw IllegalStateException("Wi-Fi disconnected. Reconnect and scan again.")
                             runOnUiThread { result.success(reachable) }
@@ -148,23 +137,7 @@ class MainActivity : FlutterActivity() {
                             if (address !is Inet4Address || properties.linkAddresses.none {
                                     it.address is Inet4Address && sameSubnet(it.address.address, address.address, it.prefixLength)
                                 }) throw IllegalArgumentException("Address is outside the Wi-Fi subnet.")
-                            var reachable = false
-                            val open = mutableListOf<Int>()
-                            for (port in ports) {
-                                try {
-                                    network.socketFactory.createSocket().use { socket ->
-                                        socket.connect(InetSocketAddress(address, port), 350)
-                                        reachable = true
-                                        open.add(port)
-                                    }
-                                } catch (e: ConnectException) {
-                                    // Explicit refusal is evidence of an answering IP stack.
-                                    if (e.cause is android.system.ErrnoException &&
-                                        (e.cause as android.system.ErrnoException).errno == android.system.OsConstants.ECONNREFUSED ||
-                                        e.message?.contains("ECONNREFUSED") == true) reachable = true
-                                } catch (e: SecurityException) { throw e
-                                } catch (_: java.io.IOException) { /* timeout / unreachable */ }
-                            }
+                            val (reachable, open) = scanPorts(network, address, stopAfterFirstResponse = false)
                             if (manager.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) != true)
                                 throw IllegalStateException("Wi-Fi disconnected. Reconnect and scan again.")
                             val macAddress = macAddressFor(ip)
@@ -181,6 +154,48 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private data class ProbeOutcome(val port: Int, val responded: Boolean, val open: Boolean)
+
+    private fun scanPorts(
+        network: Network,
+        address: Inet4Address,
+        stopAfterFirstResponse: Boolean
+    ): Pair<Boolean, List<Int>> {
+        var reachable = false
+        val openPorts = mutableListOf<Int>()
+        for (batch in ports.chunked(3)) {
+            val outcomes = probeWorkers.invokeAll(batch.map { port ->
+                Callable {
+                    try {
+                        network.socketFactory.createSocket().use { socket ->
+                            socket.connect(InetSocketAddress(address, port), 350)
+                            ProbeOutcome(port, responded = true, open = true)
+                        }
+                    } catch (e: ConnectException) {
+                        val refused =
+                            (e.cause as? android.system.ErrnoException)?.errno == android.system.OsConstants.ECONNREFUSED ||
+                                e.message?.contains("ECONNREFUSED") == true
+                        ProbeOutcome(port, responded = refused, open = false)
+                    } catch (_: java.io.IOException) {
+                        ProbeOutcome(port, responded = false, open = false)
+                    }
+                }
+            }).map { future ->
+                try {
+                    future.get()
+                } catch (e: ExecutionException) {
+                    throw e.cause as? Exception ?: e
+                }
+            }
+            for (outcome in outcomes) {
+                reachable = reachable || outcome.responded
+                if (outcome.open) openPorts.add(outcome.port)
+            }
+            if (reachable && stopAfterFirstResponse) break
+        }
+        return Pair(reachable, openPorts)
     }
 
     private fun sameSubnet(a: ByteArray, b: ByteArray, prefix: Int): Boolean {

@@ -94,6 +94,7 @@ const serviceNames = <int, String>{
   8080: 'HTTP',
   9100: 'Printer'
 };
+const _portsPerBatch = 3;
 
 class NetworkApi {
   static const channel = MethodChannel('netmap/network');
@@ -171,11 +172,15 @@ class NetworkApi {
     if (reverseName != null && reverseName.isNotEmpty && reverseName != ip)
       return reverseName;
 
-    if (Platform.isWindows) {
-      final name = await _lookupWindowsName(ip);
+    final fallbacks = <Future<String?>>[_lookupMdnsName(network, ip)];
+    if (Platform.isWindows) fallbacks.insert(0, _lookupWindowsName(ip));
+    for (final name in await Future.wait(fallbacks)) {
       if (name != null) return name;
     }
+    return null;
+  }
 
+  Future<String?> _lookupMdnsName(WifiNetwork network, String ip) async {
     final client = _mdnsClient;
     if (client == null || _mdnsInterfaceIp != network.ip) return null;
     final reversedAddress = ip.split('.').reversed.join('.');
@@ -198,21 +203,25 @@ class NetworkApi {
   }
 
   Future<String?> _lookupWindowsName(String ip) async {
-    final nslookupName = await _runWindowsNameCommand(
-      'nslookup.exe',
-      [ip],
-      RegExp(r'^\s*Name:\s*(.+?)\s*$', multiLine: true, caseSensitive: false),
-      ip,
-    );
-    if (nslookupName != null) return nslookupName;
-
-    return _runWindowsNameCommand(
-      'ping.exe',
-      ['-a', '-n', '1', '-w', '1000', ip],
-      RegExp(r'^\s*Pinging\s+(.+?)\s+\[',
-          multiLine: true, caseSensitive: false),
-      ip,
-    );
+    final names = await Future.wait([
+      _runWindowsNameCommand(
+        'nslookup.exe',
+        [ip],
+        RegExp(r'^\s*Name:\s*(.+?)\s*$', multiLine: true, caseSensitive: false),
+        ip,
+      ),
+      _runWindowsNameCommand(
+        'ping.exe',
+        ['-a', '-n', '1', '-w', '1000', ip],
+        RegExp(r'^\s*Pinging\s+(.+?)\s+\[',
+            multiLine: true, caseSensitive: false),
+        ip,
+      ),
+    ]);
+    for (final name in names) {
+      if (name != null) return name;
+    }
+    return null;
   }
 
   Future<String?> _runWindowsNameCommand(
@@ -448,18 +457,30 @@ Start-Process -FilePath \$chrome -ArgumentList 'https://$ip'
       throw StateError('Address is outside the selected subnet.');
     var reachable = false;
     final openPorts = <int>[];
-    for (final port in serviceNames.keys) {
+    Future<({bool responded, bool open})> probe(int port) async {
       Socket? socket;
       try {
         socket = await Socket.connect(ip, port,
             sourceAddress: network.ip,
             timeout: const Duration(milliseconds: 350));
-        reachable = true;
-        openPorts.add(port);
+        return (responded: true, open: true);
       } on SocketException catch (e) {
-        if (e.osError?.errorCode == 10061) reachable = true;
+        return (
+          responded: e.osError?.errorCode == 10061,
+          open: false,
+        );
       } finally {
         socket?.destroy();
+      }
+    }
+
+    final ports = serviceNames.keys.toList();
+    for (var offset = 0; offset < ports.length; offset += _portsPerBatch) {
+      final batch = ports.skip(offset).take(_portsPerBatch).toList();
+      final outcomes = await Future.wait(batch.map(probe));
+      for (var index = 0; index < outcomes.length; index++) {
+        reachable = reachable || outcomes[index].responded;
+        if (outcomes[index].open) openPorts.add(batch[index]);
       }
       if (reachable && stopAfterFirstResponse) break;
     }

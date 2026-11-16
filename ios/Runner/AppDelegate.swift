@@ -163,15 +163,8 @@ import UIKit
                     userInfo: [NSLocalizedDescriptionKey: "Address is outside the Wi-Fi subnet."])
     }
 
-    let ports = [22, 80, 443, 445, 554, 631, 8008, 8080, 9100]
-    var responsive = false
-    var openPorts = [Int]()
-    for port in ports {
-      let outcome = try probe(ip: target, source: network.address, port: port)
-      responsive = responsive || outcome.responded
-      if outcome.open { openPorts.append(port) }
-    }
-    return ["reachable": responsive, "ports": openPorts, "macAddress": NSNull()]
+    let scan = try scanPorts(ip: target, source: network.address, stopAfterFirstResponse: false)
+    return ["reachable": scan.responsive, "ports": scan.openPorts, "macAddress": NSNull()]
   }
 
   private func discover(ip: String, interface: String) throws -> Bool {
@@ -190,12 +183,53 @@ import UIKit
       throw NSError(domain: "NetMap", code: 5,
                     userInfo: [NSLocalizedDescriptionKey: "Address is outside the Wi-Fi subnet."])
     }
-    for port in [22, 80, 443, 445, 554, 631, 8008, 8080, 9100] {
-      if try probe(ip: target, source: network.address, port: port).responded {
-        return true
+    return try scanPorts(ip: target, source: network.address, stopAfterFirstResponse: true).responsive
+  }
+
+  private func scanPorts(
+    ip: in_addr,
+    source: in_addr,
+    stopAfterFirstResponse: Bool
+  ) throws -> (responsive: Bool, openPorts: [Int]) {
+    let ports = [22, 80, 443, 445, 554, 631, 8008, 8080, 9100]
+    let queue = OperationQueue()
+    queue.maxConcurrentOperationCount = 3
+    queue.qualityOfService = .userInitiated
+    var responsive = false
+    var openPorts = [Int]()
+
+    for offset in stride(from: 0, to: ports.count, by: 3) {
+      let batch = Array(ports[offset..<min(offset + 3, ports.count)])
+      let lock = NSLock()
+      var outcomes = [Int: (responded: Bool, open: Bool)]()
+      var failure: Error?
+      for port in batch {
+        queue.addOperation {
+          do {
+            let outcome = try self.probe(ip: ip, source: source, port: port)
+            lock.lock()
+            outcomes[port] = outcome
+            lock.unlock()
+          } catch {
+            lock.lock()
+            if failure == nil { failure = error }
+            lock.unlock()
+          }
+        }
       }
+      queue.waitUntilAllOperationsAreFinished()
+      if let failure { throw failure }
+      for port in batch {
+        guard let outcome = outcomes[port] else {
+          throw NSError(domain: "NetMap", code: 6,
+                        userInfo: [NSLocalizedDescriptionKey: "A network probe did not return a result."])
+        }
+        responsive = responsive || outcome.responded
+        if outcome.open { openPorts.append(port) }
+      }
+      if responsive && stopAfterFirstResponse { break }
     }
-    return false
+    return (responsive, openPorts)
   }
 
   private func probe(ip: in_addr, source: in_addr, port: Int) throws -> (responded: Bool, open: Bool) {
