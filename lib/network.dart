@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:multicast_dns/multicast_dns.dart';
+import 'package:network_tools/network_tools.dart';
+import 'package:path_provider/path_provider.dart';
 
 class WifiNetwork {
   final String ip;
@@ -12,6 +14,18 @@ class WifiNetwork {
   const WifiNetwork(this.ip, this.prefix, this.gateway, this.id);
   factory WifiNetwork.fromMap(Map<dynamic, dynamic> m) => WifiNetwork(
     m['ip'] as String, m['prefix'] as int, m['gateway'] as String?, m['id'] as String);
+  /// Package-compatible ranges; native probes cover valid .0 and .255 hosts.
+  Map<String, List<int>> get discoveryRanges {
+    final groups = <String, List<int>>{};
+    for (final ip in hosts) {
+      final split = ip.lastIndexOf('.');
+      final id = int.parse(ip.substring(split + 1));
+      if (id > 0 && id < 255) {
+        groups.putIfAbsent(ip.substring(0, split), () => []).add(id);
+      }
+    }
+    return groups;
+  }
   List<String> get hosts {
     // A broad subnet requires an explicit range-selection UI, rather than
     // silently scanning a different /24 or flooding tens of thousands of hosts.
@@ -42,6 +56,38 @@ class Device {
 const serviceNames = <int, String>{22:'SSH', 80:'HTTP', 443:'HTTPS', 445:'SMB', 554:'RTSP', 631:'IPP', 8008:'HTTP', 8080:'HTTP', 9100:'Printer'};
 
 class NetworkApi {
+  Future<void>? _toolsReady;
+
+  Future<void> _initializeTools() async {
+    final directory = await getApplicationSupportDirectory();
+    await configureNetworkTools(directory.path, buildVendorTable: false);
+  }
+
+  /// Android retains native probes bound to the selected Wi-Fi Network.
+  Stream<Device> discover(WifiNetwork network, {required bool Function() isCancelled}) async* {
+    if (!Platform.isWindows) return;
+    final allowed = network.hosts.toSet();
+    final groups = network.discoveryRanges;
+    try {
+      await (_toolsReady ??= _initializeTools());
+    } catch (_) {
+      _toolsReady = null;
+      rethrow;
+    }
+    final seen = <String>{};
+    for (final group in groups.entries) {
+      if (isCancelled()) return;
+      await for (final host in HostScannerService.instance.getAllSendablePingableDevices(
+        group.key, firstHostId: group.value.first, lastHostId: group.value.last,
+        hostIds: group.value, timeoutInSeconds: 1,
+      )) {
+        if (isCancelled()) return;
+        if (!allowed.contains(host.address) || !seen.add(host.address)) continue;
+        yield Device(host.address, gateway: host.address == network.gateway,
+          name: await _lookupName(network, host.address));
+      }
+    }
+  }
   static const channel = MethodChannel('netmap/network');
   MDnsClient? _mdnsClient;
   String? _mdnsInterfaceIp;

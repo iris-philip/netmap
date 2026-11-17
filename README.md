@@ -5,8 +5,8 @@ NetMap discovers responding IPv4 devices on a connected local network and displa
 ## Features
 
 - Reads the Wi-Fi address, prefix, and gateway from Android, or the active IPv4 configuration on Windows.
-- Discovers responding hosts on /22 through /30 networks using bounded TCP probes.
-- On Android, attaches sockets to Wi-Fi even when mobile data is enabled.
+- Discovers responding hosts on /22 through /30 networks using bounded TCP probes. Windows adds a `network_tools` discovery pass with TCP and ICMP fallback, merging results by IP.
+- On Android, retains native sockets attached to Wi-Fi even when mobile data is enabled; `network_tools` cannot select an Android Network.
 - Displays a zoomable subnet map, device details, responding ports, scan progress, stop/rescan, and CSV export.
 - Looks up reverse-DNS and mDNS names when available; it does not infer device types, MAC addresses, or vendors.
 - Probes TCP ports 22, 80, 443, 445, 554, 631, 8008, 8080, and 9100. An accepted connection or explicit refusal counts as a response.

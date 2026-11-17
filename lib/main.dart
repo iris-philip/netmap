@@ -86,6 +86,23 @@ class _NetworkScreenState extends State<NetworkScreen> {
         }
       }
       await Future.wait(List.generate(math.min(16, hosts.length), (_) => worker()));
+      if (!mounted || run != generation) return;
+      if (Platform.isWindows) {
+        setState(() { status = 'Checking for additional devices…'; });
+        try {
+          await for (final device in api.discover(wifi,
+            isCancelled: () => !mounted || run != generation)) {
+            if (!mounted || run != generation) return;
+            if (devices.any((existing) => existing.ip == device.ip)) continue;
+            final details = await api.probe(wifi, device.ip);
+            if (!mounted || run != generation) return;
+            setState(() => devices.add(details ?? device));
+          }
+        } catch (e) {
+          if (!mounted || run != generation) return;
+          addWarning('Additional device discovery is unavailable: $e');
+        }
+      }
       if (mounted && run == generation) setState(() { scanning = false; status = 'Scan complete • ${devices.length} devices including this device'; });
     } catch (e) {
       if (mounted && run == generation) setState(() {
@@ -207,7 +224,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
               Text(status, style: const TextStyle(fontSize: 12, color: Colors.white70)),
             ])), Text('${devices.length}', style: Theme.of(context).textTheme.headlineMedium),
           ]))),
-          if (scanning) ...[const SizedBox(height: 8), LinearProgressIndicator(value: total == 0 ? null : done / total), const SizedBox(height: 4), Text('$done / $total addresses checked')],
+          if (scanning) ...[const SizedBox(height: 8), LinearProgressIndicator(value: total == 0 || done == total ? null : done / total), const SizedBox(height: 4), Text('$done / $total addresses checked')],
           if (error != null) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
           const SizedBox(height: 12),
           Row(children: [Expanded(child: FilledButton.icon(
